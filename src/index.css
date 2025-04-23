@@ -1,0 +1,190 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: #1e293b; /* slate-800 */
+  background-color: #fafafa; /* bright-200 */
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: 500;
+  color: #475569; /* slate-600 */
+  text-decoration: inherit;
+}
+a:hover {
+  color: #334155; /* slate-700 */
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: #fdfdfd; /* bright-50 */
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #fcfcfc; /* bright-100 */
+  cursor: pointer;
+  transition: border-color 0.25s, background-color 0.25s;
+}
+button:hover {
+  border-color: #94a3b8; /* slate-400 */
+  background-color: #fafafa; /* bright-200 */
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+/* Chat message styles */
+.user-message {
+  background-color: #1e293b; /* slate-800 */
+  color: white;
+}
+
+.ai-message {
+  background-color: white;
+  color: #1e293b; /* slate-800 */
+  border: 1px solid #e2e8f0; /* slate-200 */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #f1f5f9; /* slate-100 */
+    background-color: #0f172a; /* slate-900 */
+  }
+  a:hover {
+    color: #94a3b8; /* slate-400 */
+  }
+  button {
+    background-color: #1e293b; /* slate-800 */
+  }
+  button:hover {
+    background-color: #334155; /* slate-700 */
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #0f172a; /* slate-900 */
+    background-color: #fdfdfd; /* bright-50 */
+  }
+  a:hover {
+    color: #64748b; /* slate-500 */
+  }
+  button {
+    background-color: #fafafa; /* bright-200 */
+  }
+}
+
+/* Green and Cream Theme */
+.theme-green {
+  color: #2E5339 !important; /* deepGreen for text */
+  background-color: #FAF3E0 !important; /* cream for page background */
+}
+
+.theme-green h1, 
+.theme-green .app-title {
+  color: #2E5339 !important; /* deepGreen for app title */
+}
+
+.theme-green .subtext {
+  color: #556B5D !important; /* mutedOlive for subtext */
+}
+
+.theme-green .prompt-box {
+  background-color: #D7E8D0 !important; /* softGreen for suggested prompt boxes */
+  color: #1E392A !important; /* darkForest for suggested prompt text */
+}
+
+.theme-green input, 
+.theme-green textarea {
+  background-color: #FFF9F2 !important; /* lightCream for input field background */
+  color: #2E5339 !important; /* deepGreen for input field text */
+  border-color: #D7E8D0 !important; /* softGreen for borders */
+}
+
+.theme-green button:not(.theme-exempt) {
+  background-color: #D7E8D0 !important; /* softGreen for buttons */
+  color: #2E5339 !important; /* deepGreen for button text */
+}
+
+.theme-green button:not(.theme-exempt):hover {
+  background-color: #BFD8B8 !important; /* hoverGreen for button hover */
+}
+
+/* Green theme chat messages */
+.theme-green .user-message {
+  background-color: #2E5339 !important; /* deepGreen */
+  color: white !important;
+}
+
+.theme-green .ai-message {
+  background-color: #FFF9F2 !important; /* lightCream */
+  color: #2E5339 !important; /* deepGreen */
+  border: 1px solid #D7E8D0 !important; /* softGreen */
+}
+
+/* Tailwind classes for greenTheme */
+.bg-greenTheme-cream { background-color: #FAF3E0 !important; }
+.bg-greenTheme-deepGreen { background-color: #2E5339 !important; }
+.bg-greenTheme-mutedOlive { background-color: #556B5D !important; }
+.bg-greenTheme-softGreen { background-color: #D7E8D0 !important; }
+.bg-greenTheme-darkForest { background-color: #1E392A !important; }
+.bg-greenTheme-lightCream { background-color: #FFF9F2 !important; }
+.bg-greenTheme-hoverGreen { background-color: #BFD8B8 !important; }
+
+.text-greenTheme-cream { color: #FAF3E0 !important; }
+.text-greenTheme-deepGreen { color: #2E5339 !important; }
+.text-greenTheme-mutedOlive { color: #556B5D !important; }
+.text-greenTheme-softGreen { color: #D7E8D0 !important; }
+.text-greenTheme-darkForest { color: #1E392A !important; }
+.text-greenTheme-lightCream { color: #FFF9F2 !important; }
+.text-greenTheme-hoverGreen { color: #BFD8B8 !important; }
+
+.border-greenTheme-cream { border-color: #FAF3E0 !important; }
+.border-greenTheme-deepGreen { border-color: #2E5339 !important; }
+.border-greenTheme-mutedOlive { border-color: #556B5D !important; }
+.border-greenTheme-softGreen { border-color: #D7E8D0 !important; }
+.border-greenTheme-darkForest { border-color: #1E392A !important; }
+.border-greenTheme-lightCream { border-color: #FFF9F2 !important; }
+.border-greenTheme-hoverGreen { border-color: #BFD8B8 !important; }
+
+.placeholder-greenTheme-cream::placeholder { color: #FAF3E0 !important; }
+.placeholder-greenTheme-deepGreen::placeholder { color: #2E5339 !important; }
+.placeholder-greenTheme-mutedOlive::placeholder { color: #556B5D !important; }
+.placeholder-greenTheme-softGreen::placeholder { color: #D7E8D0 !important; }
+.placeholder-greenTheme-darkForest::placeholder { color: #1E392A !important; }
+.placeholder-greenTheme-lightCream::placeholder { color: #FFF9F2 !important; }
+.placeholder-greenTheme-hoverGreen::placeholder { color: #BFD8B8 !important; }
+
+.focus\:ring-greenTheme-cream:focus { --tw-ring-color: #FAF3E0 !important; }
+.focus\:ring-greenTheme-deepGreen:focus { --tw-ring-color: #2E5339 !important; }
+.focus\:ring-greenTheme-mutedOlive:focus { --tw-ring-color: #556B5D !important; }
+.focus\:ring-greenTheme-softGreen:focus { --tw-ring-color: #D7E8D0 !important; }
+.focus\:ring-greenTheme-darkForest:focus { --tw-ring-color: #1E392A !important; }
+.focus\:ring-greenTheme-lightCream:focus { --tw-ring-color: #FFF9F2 !important; }
+.focus\:ring-greenTheme-hoverGreen:focus { --tw-ring-color: #BFD8B8 !important; }
