@@ -1,15 +1,14 @@
 # agent3_sql_final.py — Fully mirrored from MongoDB agent3.py for PostgreSQL
-from SQL.db_utils import execute_sql_query, get_db_connection
+from SQL.db_utils import execute_sql_query, get_db_connection, load_config
 from SQL.llm_wrapper import Custom_GenAI
 from SQL.log_utils import insert_log
 from SQL.helper import get_country_iso3
 from SQL.utils import clean_sql_query, format_sql_results
 import re
-import os
 from datetime import datetime
 
-PRIMARY_LLM = Custom_GenAI(os.getenv("LLM_API_KEY"))
-SYNTAX_LLM = Custom_GenAI(os.getenv("LLM_API_KEY"))
+PRIMARY_LLM = Custom_GenAI(load_config()["API_KEY"])
+SYNTAX_LLM = Custom_GenAI(load_config()["API_KEY"])
 query_cache = {}
 
 
@@ -332,7 +331,7 @@ def process_query(user_query):
             "operation": "insert",
             "table": "ingredient_nutrition",
             "fields": [
-                "fdc_id","ingredient_name", "category_name", "fat_g",
+                "ingredient_name", "category_name", "fat_g",
                 "carbohydrate_g", "protein_g", "energy_kcal"
             ],
             "prompt": "📝 Enter: ingredient name, category, and basic nutrition info."
@@ -344,7 +343,7 @@ def process_query(user_query):
             "action": "collect_input",
             "operation": "update",
             "table": "ingredient_nutrition",
-            "fields": ["fdc_id","ingredient_name", "field", "value"],
+            "fields": ["ingredient_name", "field", "value"],
             "prompt": "✏️ Enter: ingredient name, field to update, and new value."
         }
 
@@ -354,7 +353,7 @@ def process_query(user_query):
             "action": "collect_input",
             "operation": "delete",
             "table": "ingredient_nutrition",
-            "fields": ["fdc_id","ingredient_name"],
+            "fields": ["ingredient_name"],
             "prompt": "🗑️ Enter the ingredient name to delete."
         }
 
@@ -420,7 +419,6 @@ def process_query(user_query):
 
         If something is wrong, suggest the corrected version.
         If valid, reply with 'Valid ✅'.  
-        text array fields are an array so use ANY() instead of LIKE when joining or finding for arrays in the database
         If invalid, reply only with the corrected SQL query enclosed in a ```sql block — and nothing else.
 
         """

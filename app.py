@@ -1,19 +1,21 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import psycopg2
 import traceback
+import os
 from SQL.db_utils import execute_sql_query
 from SQL.log_utils import insert_log
 from Mongodb.agent3 import process_query as process_mongo
 from SQL.agent3_sql_final import process_query as process_sql
 from Mongodb.mongo_utils import load_config as load_mongo_config
-from SQL.db_utils import load_config as load_sql_config
+# from SQL.db_utils import load_config as load_sql_config
 
 app = Flask(__name__)
 CORS(app)
 
 # Load config (API key, DB password)
 mongo_config = load_mongo_config()
-sql_config = load_sql_config()
+# sql_config = load_sql_config
 
 @app.route("/health")
 def health():
@@ -22,6 +24,27 @@ def health():
 @app.route("/")
 def home():
     return "👋 Welcome to RecipeLLM Backend (Hybrid Mongo + SQL)!"
+
+
+
+@app.route("/check-db", methods=["GET"])
+def check_db():
+    try:
+        conn = psycopg2.connect(
+            host=os.getenv("DB_HOST", "localhost"),
+            port=os.getenv("DB_PORT", "5432"),
+            database=os.getenv("DB_NAME", "recipe_chatbot"),
+            user=os.getenv("DB_USER", "postgres"),
+            password=os.getenv("DB_PASSWORD", "")
+        )
+        cur = conn.cursor()
+        cur.execute("SELECT 1;")
+        conn.close()
+        return jsonify({"status": "✅ PostgreSQL connection successful!"})
+    except Exception as e:
+        print("❌ PostgreSQL connection failed:", e)
+        return jsonify({"error": str(e)})
+
 
 @app.route("/ask", methods=["POST"])
 def ask():
@@ -67,52 +90,104 @@ def submit():
     try:
         # ---------------------- DELETE ----------------------
         if action == "delete":
-            if table == "recipes":
-                key = "recipeid" if mode == "sql" else "name"
-                val = fields.get(key)
-                if not val:
-                    return jsonify({"error": f"Missing required key: {key}"}), 400
-                sql = f"DELETE FROM recipes WHERE {key} = {val!r};"
+            if mode == "sql":
+                if table == "recipes":
+                    key = "recipeid"
+                    val = fields.get(key)
+                    if not val:
+                        return jsonify({"error": f"Missing required key: {key}"}), 400
+                    sql = f"DELETE FROM recipes WHERE {key} = {val!r};"
 
-            elif table == "ingredient_nutrition":
-                key = "ingredient_name"
-                val = fields.get(key)
-                sql = f"DELETE FROM ingredient_nutrition WHERE {key} = {val!r};"
+                elif table == "ingredient_nutrition":
+                    key = "ingredient_name"
+                    val = fields.get(key)
+                    sql = f"DELETE FROM ingredient_nutrition WHERE {key} = {val!r};"
 
-            elif table == "food_prices":
-                com = fields.get("commodity")
-                market = fields.get("market")
-                sql = f"DELETE FROM food_prices WHERE commodity = {com!r} AND market = {market!r};"
+                elif table == "food_prices":
+                    com = fields.get("commodity")
+                    market = fields.get("market")
+                    sql = f"DELETE FROM food_prices WHERE commodity = {com!r} AND market = {market!r};"
 
-            _, _ = execute_sql_query(sql)
-            insert_log(user_query, "DELETE", sql, table, success=True)
-            return jsonify({"result": f"🗑️ Deleted entry from {table}."})
+                _, _ = execute_sql_query(sql)
+                insert_log(user_query, "DELETE", sql, table, success=True)
+                return jsonify({"result": f"🗑️ Deleted entry from {table}."})
 
-        # ---------------------- UPDATE ----------------------
+            elif mode == "mongo":
+                from Mongodb.mongo_utils import connect_mongo
+                db = connect_mongo()
+                collection = db[table]
+
+                if table == "recipes":
+                    filter_query = {"name": fields.get("name")}
+                elif table == "ingredient_nutrition":
+                    filter_query = {"ingredient_name": fields.get("ingredient_name")}
+                elif table == "food_prices":
+                    filter_query = {
+                        "commodity": fields.get("commodity"),
+                        "market": fields.get("market")
+                    }
+                else:
+                    return jsonify({"error": "Unsupported MongoDB delete operation"}), 400
+
+                print("🗑️ Mongo DELETE → Filter:", filter_query)
+                result = collection.delete_one(filter_query)
+                if result.deleted_count:
+                    return jsonify({"result": f"🗑️ Deleted from `{table}` successfully."})
+                else:
+                    return jsonify({"result": f"⚠️ No matching document found in `{table}`."})
+
+
+# ---------------------- UPDATE ----------------------
         elif action == "update":
             field = fields.get("field")
             value = fields.get("value")
             if not field or value is None:
                 return jsonify({"error": "❌ 'field' and 'value' are required for update."}), 400
 
-            if table == "recipes":
-                key = "recipeid" if mode == "sql" else "name"
-                val = fields.get(key)
-                sql = f"UPDATE recipes SET {field} = {value!r} WHERE {key} = {val!r};"
+            if mode == "sql":
+                if table == "recipes":
+                    key = "recipeid"
+                    val = fields.get(key)
+                    sql = f"UPDATE recipes SET {field} = {value!r} WHERE {key} = {val!r};"
 
-            elif table == "ingredient_nutrition":
-                key = "ingredient_name"
-                val = fields.get(key)
-                sql = f"UPDATE ingredient_nutrition SET {field} = {value!r} WHERE {key} = {val!r};"
+                elif table == "ingredient_nutrition":
+                    key = "ingredient_name"
+                    val = fields.get(key)
+                    sql = f"UPDATE ingredient_nutrition SET {field} = {value!r} WHERE {key} = {val!r};"
 
-            elif table == "food_prices":
-                com = fields.get("commodity")
-                market = fields.get("market")
-                sql = f"UPDATE food_prices SET {field} = {value!r} WHERE commodity = {com!r} AND market = {market!r};"
+                elif table == "food_prices":
+                    com = fields.get("commodity")
+                    market = fields.get("market")
+                    sql = f"UPDATE food_prices SET {field} = {value!r} WHERE commodity = {com!r} AND market = {market!r};"
 
-            _, _ = execute_sql_query(sql)
-            insert_log(user_query, "UPDATE", sql, table, success=True)
-            return jsonify({"result": f"✏️ Updated {field} in {table}."})
+                _, _ = execute_sql_query(sql)
+                insert_log(user_query, "UPDATE", sql, table, success=True)
+                return jsonify({"result": f"✏️ Updated `{field}` in `{table}`."})
+
+            elif mode == "mongo":
+                from Mongodb.mongo_utils import connect_mongo
+                db = connect_mongo()
+                collection = db[table]
+
+                if table == "recipes":
+                    match = {"name": fields.get("name")}
+                elif table == "ingredient_nutrition":
+                    match = {"ingredient_name": fields.get("ingredient_name")}
+                elif table == "food_prices":
+                    match = {
+                        "commodity": fields.get("commodity"),
+                        "market": fields.get("market")
+                    }
+                else:
+                    return jsonify({"error": "Unsupported MongoDB update operation"}), 400
+
+                print("🛠️ Mongo UPDATE → Match:", match, "| Field:", field, "| New Value:", value)
+                result = collection.update_one(match, {"$set": {field: value}})
+                if result.modified_count:
+                    return jsonify({"result": f"✅ Updated `{field}` in `{table}`."})
+                else:
+                    return jsonify({"result": f"⚠️ No changes made in `{table}`. Value may be identical or match failed."})
+
 
         # ---------------------- INSERT ----------------------
         elif action == "insert":
@@ -120,41 +195,64 @@ def submit():
                 if mode == "sql":
                     required = ["recipeid", "name", "recipeingredientparts", "recipecategory",
                                 "calories", "fatcontent", "carbohydratecontent", "proteincontent", "recipeinstructions"]
-                else:  # mongo
-                    required = ["name", "recipecategory", "recipeingredientparts",
-                                "calories", "fatcontent", "carbohydratecontent", "proteincontent", "recipeinstructions"]
 
-                arr_parts = ', '.join(f"'{i.strip()}'" for i in (fields.get("recipeingredientparts") or "").split(","))
-                arr_instr = ', '.join(f"'{i.strip()}'" for i in (fields.get("recipeinstructions") or "").split(","))
+                    arr_parts = ', '.join(f"'{i.strip()}'" for i in (fields.get("recipeingredientparts") or "").split(","))
+                    arr_instr = ', '.join(f"'{i.strip()}'" for i in (fields.get("recipeinstructions") or "").split(","))
 
-                rid_expr = f"{fields['recipeid']!r}," if mode == "sql" else ""
-                col_expr = f"recipeid, " if mode == "sql" else ""
+                    rid_expr = f"{fields['recipeid']!r},"
+                    col_expr = f"recipeid, "
 
-                sql = f"""INSERT INTO recipes ({col_expr}name, recipeingredientparts, recipecategory,
-                          calories, fatcontent, carbohydratecontent, proteincontent, recipeinstructions)
-                          VALUES ({rid_expr}{fields['name']!r}, ARRAY[{arr_parts}],
-                          {fields['recipecategory']!r}, {fields['calories']}, {fields['fatcontent']},
-                          {fields['carbohydratecontent']}, {fields['proteincontent']}, ARRAY[{arr_instr}]);"""
+                    sql = f"""INSERT INTO recipes ({col_expr}name, recipeingredientparts, recipecategory,
+                            calories, fatcontent, carbohydratecontent, proteincontent, recipeinstructions)
+                            VALUES ({rid_expr}{fields['name']!r}, ARRAY[{arr_parts}],
+                            {fields['recipecategory']!r}, {fields['calories']}, {fields['fatcontent']},
+                            {fields['carbohydratecontent']}, {fields['proteincontent']}, ARRAY[{arr_instr}]);"""
+
+                    _, _ = execute_sql_query(sql)
+                    insert_log(user_query, "INSERT", sql, table, success=True)
+                    return jsonify({"result": f"✅ Inserted into {table} successfully."})
+
+                else:  # MONGO insert
+                    from Mongodb.mongo_utils import connect_mongo
+
+                    recipe_doc = {
+                        "name": fields.get("name"),
+                        "recipecategory": fields.get("recipe_category"),
+                        "recipeingredientparts": [x.strip() for x in (fields.get("recipe_ingredient_parts") or "").split(",")],
+                        "calories": float(fields.get("calories", 0)),
+                        "fatcontent": float(fields.get("fat_g", 0)),
+                        "carbohydratecontent": float(fields.get("carbohydrate_g", 0)),
+                        "proteincontent": float(fields.get("protein_g", 0)),
+                        "recipeinstructions": [x.strip() for x in (fields.get("recipe_instructions") or "").split(",")],
+                    }
+
+                    db = connect_mongo()
+                    db["recipes"].insert_one(recipe_doc)
+                    insert_log(user_query, "INSERT", str(recipe_doc), table, success=True)
+                    return jsonify({"result": f"✅ Recipe '{fields.get('name')}' added to MongoDB."})
 
             elif table == "ingredient_nutrition":
-                sql = f"""INSERT INTO ingredient_nutrition (ingredient_name, category_name, fat_g,
-                          carbohydrate_g, protein_g, energy_kcal)
-                          VALUES ({fields['ingredient_name']!r}, {fields['category_name']!r}, {fields['fat_g']},
-                          {fields['carbohydrate_g']}, {fields['protein_g']}, {fields['energy_kcal']});"""
+                sql = f"""INSERT INTO ingredient_nutrition (fdc_id, ingredient_name, category_name, fat_g,
+                  carbohydrate_g, protein_g, energy_kcal)
+                    VALUES ({fields['fdc_id']}, {fields['ingredient_name']!r}, {fields['category_name']!r}, {fields['fat_g']},
+                  {fields['carbohydrate_g']}, {fields['protein_g']}, {fields['energy_kcal']});"""
+
+
+                _, _ = execute_sql_query(sql)
+                insert_log(user_query, "INSERT", sql, table, success=True)
+                return jsonify({"result": f"✅ Inserted into {table} successfully."})
 
             elif table == "food_prices":
                 sql = f"""INSERT INTO food_prices (countryiso3, date, market, category, commodity,
-                          unit, price, usdprice)
-                          VALUES ({fields['countryiso3']!r}, DATE {fields['date']!r}, {fields['market']!r},
-                          {fields['category']!r}, {fields['commodity']!r}, {fields['unit']!r},
-                          {fields['price']}, {fields['usdprice']});"""
+                        unit, price, usdprice)
+                        VALUES ({fields['countryiso3']!r}, DATE {fields['date']!r}, {fields['market']!r},
+                        {fields['category']!r}, {fields['commodity']!r}, {fields['unit']!r},
+                        {fields['price']}, {fields['usdprice']});"""
 
-            _, _ = execute_sql_query(sql)
-            insert_log(user_query, "INSERT", sql, table, success=True)
-            return jsonify({"result": f"✅ Inserted into {table} successfully."})
+                _, _ = execute_sql_query(sql)
+                insert_log(user_query, "INSERT", sql, table, success=True)
+                return jsonify({"result": f"✅ Inserted into {table} successfully."})
 
-        else:
-            return jsonify({"error": f"❌ Unknown action: {action}"}), 400
 
     except Exception as e:
         print("❌ SUBMIT ERROR:", e)

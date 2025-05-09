@@ -9,11 +9,10 @@ from Mongodb.utils import clean_query, format_mongo_results, extract_json_block
 import json
 from datetime import datetime
 import re
-import os
 from bson import ObjectId
 
-PRIMARY_LLM = Custom_GenAI(os.getenv("LLM_API_KEY"))
-SYNTAX_LLM = Custom_GenAI(os.getenv("LLM_API_KEY"))
+PRIMARY_LLM = Custom_GenAI(load_config()["API_KEY"])
+SYNTAX_LLM = Custom_GenAI(load_config()["API_KEY"])
 
 query_cache = {}
 
@@ -105,35 +104,27 @@ def parse_date_safe(val):
 def process_query(user_query):
 
     # Step 0: Handle structured form input like: name=abc, fat_g=5 ...
-    if "=" in user_query:
+    if "=" in user_query and "," in user_query:
         try:
-            # Split correctly even if no commas (safe fallback for space-separated key=val too)
-            parts = re.findall(r'(\w+)=(".*?"|\'.*?\'|[^,]+)', user_query)
+            parts = [p.strip() for p in user_query.split(",")]
 
-            # 👇 If no valid key=value pairs found, stop and fallback
-            if not parts:
-                return "❌ Could not parse structured input. Please use key=value format."
-
+            # Safely build the dictionary, skip malformed parts
             structured_input = {}
-            for key, val in parts:
-                key = key.strip()
-                val = val.strip().strip('"').strip("'")
-
-                # Normalize array fields like ingredients
-                if key in ["recipe_ingredient_parts"]:
-                    # Allow comma-separated or single entry
-                    structured_input[key] = [v.strip().strip('"').strip("'") for v in val.split(",")]
-
-                elif key in ["date"]:
-                    structured_input[key] = parse_date_safe(val)
-
-                elif val == "":
-                    structured_input[key] = None  # Treat empty values as NULLs
-
+            for part in parts:
+                if "=" in part:
+                    key, value = part.split("=", 1)
+                    structured_input[key.strip()] = value.strip()
                 else:
-                    structured_input[key] = val
+                    return f"❌ Malformed input segment: '{part}'. Please use key=value format for all fields."
 
-            # ✅ Check operation context (prevents fallback to LLM)
+            # Normalize specific fields
+            for k, v in structured_input.items():
+                if "," in v and k in ["recipe_ingredient_parts"]:  # Add other array fields as needed
+                    structured_input[k] = [i.strip() for i in v.split(",")]
+                elif k in ["date"]:
+                    structured_input[k] = parse_date_safe(v)
+
+            # Get context from previous operation
             op_info = query_cache.get("pending_op", {})
             collection = op_info.get("collection")
             operation = op_info.get("operation")
@@ -142,12 +133,10 @@ def process_query(user_query):
                 return "⚠️ Operation context missing. Please retry your request."
 
 
-
             db = connect_mongo()
 
             # ----------------- INSERT -----------------
             if operation == "insert":
-                print(json.dumps(structured_input, indent=2))
                 result = db[collection].insert_one(structured_input)
                 inserted = db[collection].find_one({"_id": result.inserted_id})
                 preview = safe_preview(inserted)
@@ -171,13 +160,6 @@ def process_query(user_query):
                     match_filter = {"ingredient_name": structured_input["ingredient_name"]}
                 else:
                     return "❌ Not enough keys to identify the document."
-                print("🔍 Attempting to update:")
-                print("   ➤ Collection:", collection)
-                print("   ➤ Match filter:", match_filter)
-                print("   ➤ Field:", field)
-                print("   ➤ New Value:", value)
-                preview = db[collection].find_one(match_filter)
-                print("   ➤ Match preview (doc found?):", preview)
 
                 # Convert numeric if applicable
                 try:
@@ -202,9 +184,6 @@ def process_query(user_query):
                     filter_query = {"ingredient_name": structured_input["ingredient_name"]}
                 else:
                     return "❌ Not enough data to perform delete."
-                print("🔍 Attempting to delete from:", collection)
-                print("    Match filter:", filter_query)
-                print("    Document to delete:", db[collection].find_one(filter_query))
 
                 delete_result = db[collection].delete_one(filter_query)
                 if delete_result.deleted_count:
@@ -238,7 +217,7 @@ def process_query(user_query):
             }
         elif uq == "yes":
             if "pending" in query_cache:
-                wrapped_query = query_cache.pop("pending")  
+                wrapped_query = query_cache.pop("pending")  # 💾 Load and clear cache
                 try:
                     result = execute_mongo_query(db, wrapped_query)
                     insert_log(user_query, "EXECUTE", wrapped_query, success=True, matched=len(result))
@@ -436,47 +415,21 @@ def process_query(user_query):
 
 
     # LLM-based Search
-    with open("Mongodb/db_schema_context_mongo.txt", "r") as schema_file:
+    with open("db_schema_context_mongo.txt", "r") as schema_file:
         schema = schema_file.read()
-    with open("Mongodb/llm_prompt_mongo.txt", "r", encoding='utf-8') as prompt_file:
+    with open("llm_prompt_mongo.txt", "r", encoding='utf-8') as prompt_file:
         base_prompt = prompt_file.read()
 
     # user_query = user_query.replace("food_category_id", "").replace("category_name", "")
     final_prompt = base_prompt.replace("{SCHEMA}", schema).replace("{QUESTION}", user_query)
     raw_query = PRIMARY_LLM.ask_ai(final_prompt)
 
-    # Step 1: Clean and extract
-   # Clean raw query output
-    # Clean raw query output
+    # Clean and extract the output
     raw_cleaned = clean_query(raw_query)
-
-    # Remove JSON prefix if present
-    if raw_cleaned.lower().startswith("json"):
-        raw_cleaned = raw_cleaned[4:].strip()
-
-    # Try extracting the first valid JSON object (handle LLM line breaks etc.)
-    try:
-        matches = re.findall(r'{[\s\S]+?}', raw_cleaned)
-        for candidate in matches:
-            try:
-                parsed = json.loads(candidate)
-                if "collection" in parsed and "query" in parsed:
-                    query_cache["pending"] = parsed
-                    return {
-                        "action": "confirm_query",
-                        "prompt": f"⚠️ Should I run this query on `{parsed.get('collection')}`?\nReply with: yes / no / rewrite"
-                    }
-            except Exception as e:
-                continue  # skip invalid chunks
-    except Exception as e:
-        print(f"❌ Could not extract JSON from:\n{raw_cleaned}")
-
-    # If nothing valid was parsed, fallback
-    cleaned_query = raw_cleaned
-
-
-
-
+    if raw_cleaned.strip().startswith("{"):
+        cleaned_query = extract_json_block(raw_cleaned)
+    else:
+        cleaned_query = raw_cleaned 
 
     print("\n🧠 Generated Mongo Query (LLM):\n")
     print(cleaned_query)   
@@ -499,36 +452,11 @@ def process_query(user_query):
                         return f"⚠️ No sample found in `{coll_name[0]}`"
         except Exception as e:
             return f"❌ Failed to run client command: {e}"
-        
-    # Clean and extract raw LLM output
-    # Clean raw query output
     raw_cleaned = clean_query(raw_query)
-
-    # Remove JSON prefix if present
-    if raw_cleaned.lower().startswith("json"):
-        raw_cleaned = raw_cleaned[4:].strip()
-
-    # Try extracting the first valid JSON object (handle LLM line breaks etc.)
-    try:
-        matches = re.findall(r'{[\s\S]+?}', raw_cleaned)
-        for candidate in matches:
-            try:
-                parsed = json.loads(candidate)
-                if "collection" in parsed and "query" in parsed:
-                    query_cache["pending"] = parsed
-                    return {
-                        "action": "confirm_query",
-                        "prompt": f"⚠️ Should I run this query on `{parsed.get('collection')}`?\nReply with: yes / no / rewrite"
-                    }
-            except Exception as e:
-                continue  # skip invalid chunks
-    except Exception as e:
-        print(f"❌ Could not extract JSON from:\n{raw_cleaned}")
-
-    # If nothing valid was parsed, fallback
-    cleaned_query = raw_cleaned
-
- 
+    if raw_cleaned.strip().startswith("{"):
+        cleaned_query = extract_json_block(raw_cleaned)
+    else:
+        cleaned_query = raw_cleaned  
 
     print("\n🧠 Generated Mongo Query (LLM):\n")
     print(cleaned_query)
@@ -561,30 +489,19 @@ def process_query(user_query):
                 corrected_query = json.loads(matches[0])
                 print("⚠️ Detected corrected query. Overriding previous query with this one:")
                 print(json.dumps(corrected_query, indent=2))
-                wrapped_query = corrected_query  # ✅ Assign corrected query
+                wrapped_query = corrected_query  # Update actual query structure
             except json.JSONDecodeError as e:
                 print(f"❌ Could not parse corrected JSON: {e}")
-                return f"<b>Failed to parse regenerated query: {e}</b>"  # ✅ Make sure to return here
-
         else:
             print("❌ No valid JSON query found in LLM feedback.")
-            return "<b>Query could not be regenerated. Try rephrasing.</b>"  # ✅ Also return here
-
-        # ✅ Final safety return if wrapped_query still empty after all attempts
-        if not wrapped_query:
-            return "⚠️ Query regeneration completed, but nothing was returned or executed. Please rephrase."
-
 
     # Instead of asking for confirmation via input(), return a prompt to frontend
         query_cache["pending"] = wrapped_query  # 🧠 Save for the next call
 
-        print("✅ Auto-running regenerated query for testing...")
-        try:
-            result = execute_mongo_query(json.dumps(wrapped_query))
-            insert_log(user_query, "EXECUTE", wrapped_query, success=True, matched=len(result))
-            return format_mongo_results(result)
-        except Exception as e:
-            return f"❌ Failed to execute regenerated query: {e}"
+        return {
+            "action": "confirm_query",
+            "prompt": "⚠️ Should I run this query?\nReply with: yes / no / rewrite"
+        }
 
 
     try:
@@ -609,16 +526,15 @@ def process_query(user_query):
             #     except Exception as e:
             #         return f"❌ Failed to run client command: {e}"
                 
-            # If it's still not a JSON object, assume it's a client command (e.g., db.collection.find())
-            if not cleaned_query.strip().startswith("{") or '"collection"' not in cleaned_query:
-                print("⚠️ Treating as client command.")
+            if not cleaned_query.strip().startswith("{"):
+                print("⚠️ Skipping JSON parsing for non-JSON client command.")
                 try:
                     if "list_collection_names" in cleaned_query:
                         collections = db.list_collection_names()
                         return "\n".join([f"📘 {c}" for c in collections])
                     elif cleaned_query.startswith("show collections"):
                         collections = db.list_collection_names()
-                        return "\n\n".join([f"📘 {c}" for c in collections])
+                        return "\n".join([f"📘 {c}" for c in collections])
                     elif "find_one().keys()" in cleaned_query:
                         coll_name = re.findall(r"db\.(\w+)\.find_one", cleaned_query)
                         if coll_name:
@@ -657,14 +573,8 @@ def process_query(user_query):
             wrapped_query = raw_query_dict
 
         query_dict = wrapped_query.get("query", {})
-        if isinstance(wrapped_query.get("query"), dict):
-            # Only filter out fields if the original query had keys
-            if wrapped_query["query"]:
-                query_dict = {
-                    k: v for k, v in wrapped_query["query"].items()
-                    if v not in [None, "", {}]
-                }
-                wrapped_query["query"] = query_dict
+        query_dict = {k: v for k, v in query_dict.items() if v not in [None, "", {}]}
+        wrapped_query["query"] = query_dict
 
         # CLEAN QUERY BEFORE EXECUTION
         if isinstance(wrapped_query, dict) and "collection" in wrapped_query and "query" in wrapped_query:
@@ -685,16 +595,6 @@ def process_query(user_query):
 
             # ⚠️ If empty, regenerate using second LLM
             if not filtered_query:
-                if wrapped_query["query"] == {}:
-                    # If it's an empty but valid query, don't regenerate
-                    print("⚠️ Query is empty but valid ({{}}), skipping regeneration.")
-                    results = execute_mongo_query(json.dumps(wrapped_query))
-                    print("🔍 Executed query, results:")
-                    print(results)
-                    insert_log(user_query, "QUERY", wrapped_query, success=bool(results))
-                    return format_mongo_results(results)
-
-                # If it's empty and invalid, proceed with LLM regeneration
                 print("⚠️ Query is empty after filtering. Attempting regeneration via second LLM...")
 
                 clarification_prompt = f"""
@@ -709,19 +609,12 @@ def process_query(user_query):
                     The previous query was:
                     {wrapped_query}
 
-                    ---
-
-                    If the original query was empty ({{}}), you may simply return:
-                    db.recipes.find({{}}).limit(1)
-
-                    Otherwise, Please regenerate a valid MongoDB query wrapped in:
+                    Please regenerate a valid MongoDB query wrapped in:
                     {{
                     "collection": "<collection_name>",
-                    "query": {{ ... }},
-                    "limit": 1
+                    "query": {{ ... }}
                     }}
-                    
-                    Return only one valid query (no explanation), and match the schema exactly.
+
                     Use only valid fields from the schema.
                     """
 
@@ -739,43 +632,19 @@ def process_query(user_query):
                         return f"<b>Failed to parse regenerated query: {e}</b>"
                 else:
                     return "<b>Query could not be regenerated. Try rephrasing.</b>"
-                return "⚠️ Query regeneration completed but no output was returned. Please rephrase your question."
 
             else:
                 wrapped_query["query"] = filtered_query
 
 
         results = execute_mongo_query(json.dumps(wrapped_query))
-
-        # Debug: Show raw results
-        print("✅ Query executed successfully. Raw result preview:")
-        print(results)
-
-        # Handle case: No results returned
         if not results:
             print("!! Query was valid but found no matching documents.")
-            insert_log(user_query, "QUERY", wrapped_query, success=False)
-            return "⚠️ Query was valid but returned no results."
-
-        # Format results safely
-        response_text = format_mongo_results(results)
-
-        # Handle case: Formatter returned empty
-        if not response_text:
-            print("⚠️ format_mongo_results returned empty output.")
-            return "⚠️ Query ran successfully but no output was generated."
-
-        # Log and return
-        insert_log(user_query, "QUERY", wrapped_query, success=True, matched=len(results))
-        print("✅ Formatted response:")
-        print(response_text)
-        return response_text
-
-        
+        insert_log(user_query, "QUERY", cleaned_query, success=bool(results))
+        return format_mongo_results(results)
     
     except Exception as e:
         return f"❌ Mongo query error: {e}"
-    
 
 if __name__ == "__main__":
     print("🧠 Welcome to your LLM-powered Recipe Database Assistant.")

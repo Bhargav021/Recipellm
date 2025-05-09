@@ -16,16 +16,21 @@ def fix_js_syntax(js_str):
     js_str = re.sub(r'(?<!")(\$?\w+)\s*:', r'"\1":', js_str)
     return js_str
 
-def execute_mongo_query(query_string_or_dict):
-    if isinstance(query_string_or_dict, str):
-        try:
-            query_dict = json.loads(query_string_or_dict)
-        except Exception as e:
-            raise ValueError(f"Invalid query string JSON: {e}")
-    else:
-        query_dict = query_string_or_dict
+def execute_mongo_query(query_obj):
+    if isinstance(query_obj, str):
+        query_obj = json.loads(query_obj)
+    
+    collection_name = query_obj.get("collection")
+    query_filter = query_obj.get("query", {})
+    limit = query_obj.get("limit", 10)
 
-    collection = query_dict["collection"]
-    query = query_dict["query"]
+    db = MongoClient("mongodb://localhost:27017/")["recipe_chatbot"]
+    collection = db[collection_name]
 
-    return list(db[collection].find(query))
+    print(f"⚙️ Executing query on `{collection_name}` with filter {query_filter} and limit {limit}")
+    
+    cursor = collection.find(query_filter)
+    if limit:
+        cursor = cursor.limit(limit)
+
+    return list(cursor)

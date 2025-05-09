@@ -9,11 +9,10 @@ from Mongodb.utils import clean_query, format_mongo_results, extract_json_block
 import json
 from datetime import datetime
 import re
-import os
 from bson import ObjectId
 
-PRIMARY_LLM = Custom_GenAI(os.getenv("LLM_API_KEY"))
-SYNTAX_LLM = Custom_GenAI(os.getenv("LLM_API_KEY"))
+PRIMARY_LLM = Custom_GenAI(load_config()["API_KEY"])
+SYNTAX_LLM = Custom_GenAI(load_config()["API_KEY"])
 
 query_cache = {}
 
@@ -171,13 +170,6 @@ def process_query(user_query):
                     match_filter = {"ingredient_name": structured_input["ingredient_name"]}
                 else:
                     return "❌ Not enough keys to identify the document."
-                print("🔍 Attempting to update:")
-                print("   ➤ Collection:", collection)
-                print("   ➤ Match filter:", match_filter)
-                print("   ➤ Field:", field)
-                print("   ➤ New Value:", value)
-                preview = db[collection].find_one(match_filter)
-                print("   ➤ Match preview (doc found?):", preview)
 
                 # Convert numeric if applicable
                 try:
@@ -202,9 +194,6 @@ def process_query(user_query):
                     filter_query = {"ingredient_name": structured_input["ingredient_name"]}
                 else:
                     return "❌ Not enough data to perform delete."
-                print("🔍 Attempting to delete from:", collection)
-                print("    Match filter:", filter_query)
-                print("    Document to delete:", db[collection].find_one(filter_query))
 
                 delete_result = db[collection].delete_one(filter_query)
                 if delete_result.deleted_count:
@@ -238,7 +227,7 @@ def process_query(user_query):
             }
         elif uq == "yes":
             if "pending" in query_cache:
-                wrapped_query = query_cache.pop("pending")  
+                wrapped_query = query_cache.pop("pending")  # 💾 Load and clear cache
                 try:
                     result = execute_mongo_query(db, wrapped_query)
                     insert_log(user_query, "EXECUTE", wrapped_query, success=True, matched=len(result))
@@ -685,16 +674,6 @@ def process_query(user_query):
 
             # ⚠️ If empty, regenerate using second LLM
             if not filtered_query:
-                if wrapped_query["query"] == {}:
-                    # If it's an empty but valid query, don't regenerate
-                    print("⚠️ Query is empty but valid ({{}}), skipping regeneration.")
-                    results = execute_mongo_query(json.dumps(wrapped_query))
-                    print("🔍 Executed query, results:")
-                    print(results)
-                    insert_log(user_query, "QUERY", wrapped_query, success=bool(results))
-                    return format_mongo_results(results)
-
-                # If it's empty and invalid, proceed with LLM regeneration
                 print("⚠️ Query is empty after filtering. Attempting regeneration via second LLM...")
 
                 clarification_prompt = f"""
@@ -709,19 +688,12 @@ def process_query(user_query):
                     The previous query was:
                     {wrapped_query}
 
-                    ---
-
-                    If the original query was empty ({{}}), you may simply return:
-                    db.recipes.find({{}}).limit(1)
-
-                    Otherwise, Please regenerate a valid MongoDB query wrapped in:
+                    Please regenerate a valid MongoDB query wrapped in:
                     {{
                     "collection": "<collection_name>",
-                    "query": {{ ... }},
-                    "limit": 1
+                    "query": {{ ... }}
                     }}
-                    
-                    Return only one valid query (no explanation), and match the schema exactly.
+
                     Use only valid fields from the schema.
                     """
 
@@ -746,31 +718,10 @@ def process_query(user_query):
 
 
         results = execute_mongo_query(json.dumps(wrapped_query))
-
-        # Debug: Show raw results
-        print("✅ Query executed successfully. Raw result preview:")
-        print(results)
-
-        # Handle case: No results returned
         if not results:
             print("!! Query was valid but found no matching documents.")
-            insert_log(user_query, "QUERY", wrapped_query, success=False)
-            return "⚠️ Query was valid but returned no results."
-
-        # Format results safely
-        response_text = format_mongo_results(results)
-
-        # Handle case: Formatter returned empty
-        if not response_text:
-            print("⚠️ format_mongo_results returned empty output.")
-            return "⚠️ Query ran successfully but no output was generated."
-
-        # Log and return
-        insert_log(user_query, "QUERY", wrapped_query, success=True, matched=len(results))
-        print("✅ Formatted response:")
-        print(response_text)
-        return response_text
-
+        insert_log(user_query, "QUERY", cleaned_query, success=bool(results))
+        return format_mongo_results(results)
         
     
     except Exception as e:
