@@ -1,9 +1,7 @@
 import { 
-  PencilIcon, 
   MagnifyingGlassIcon,
   CheckIcon,
   XMarkIcon,
-  PlusCircleIcon,
   ChatBubbleOvalLeftIcon,
   PlusIcon,
   StarIcon as StarIconOutline
@@ -12,7 +10,7 @@ import {
   StarIcon,
   TrashIcon
 } from '@heroicons/react/24/solid';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 interface ChatHistoryProps {
   conversations: Array<{
@@ -58,11 +56,6 @@ export default function ChatHistory({
       return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
     });
   
-  const handleStartRename = (id: string, currentTitle: string) => {
-    setEditingId(id);
-    setEditTitle(currentTitle);
-  };
-
   // Handle double-click to edit chat name
   const handleDoubleClick = (id: string, currentTitle: string) => {
     setEditingId(id);

@@ -7,6 +7,11 @@ from SQL.utils import clean_sql_query, format_sql_results
 import re
 import os
 from datetime import datetime
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+SQL_SCHEMA_PATH = BASE_DIR / "db_schema_context.sql"
+SQL_PROMPT_PATH = BASE_DIR / "llm_prompt.txt"
 
 PRIMARY_LLM = Custom_GenAI(os.getenv("LLM_API_KEY"))
 SYNTAX_LLM = Custom_GenAI(os.getenv("LLM_API_KEY"))
@@ -392,16 +397,16 @@ def process_query(user_query):
         }
 
 
-    with open("SQL/db_schema_context.sql", "r", encoding="utf-8") as schema_file:
+    with open(SQL_SCHEMA_PATH, "r", encoding="utf-8") as schema_file:
         schema = schema_file.read()
-    with open("SQL/llm_prompt.txt", "r", encoding="utf-8") as prompt_file:
+    with open(SQL_PROMPT_PATH, "r", encoding="utf-8") as prompt_file:
         prompt = prompt_file.read()
     final_prompt = prompt.replace("{SCHEMA}", schema).replace("{QUESTION}", user_query)
     raw_sql = PRIMARY_LLM.ask_ai(final_prompt)
     cleaned_sql = clean_sql_query(raw_sql)
     print("\n🧠 Generated SQL Query:\n", cleaned_sql)
 
-    with open("SQL/db_schema_context.sql", "r", encoding="utf-8") as schema_file:
+    with open(SQL_SCHEMA_PATH, "r", encoding="utf-8") as schema_file:
         sql_schema_context = schema_file.read()
 
     syntax_prompt = f"""You are a PostgreSQL syntax and schema validator.

@@ -11,7 +11,15 @@ export async function queryLLM(userQuery: string, mode: string = "mongo") {
     });
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      let backendError = '';
+      try {
+        const payload = await response.json();
+        backendError = payload?.error || payload?.message || '';
+      } catch {
+        backendError = await response.text();
+      }
+      const detail = backendError ? ` - ${backendError}` : '';
+      throw new Error(`API error: ${response.status}${detail}`);
     }
 
     return await response.json();

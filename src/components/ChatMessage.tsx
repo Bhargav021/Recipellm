@@ -1,4 +1,3 @@
-import { PaperAirplaneIcon, UserIcon } from '@heroicons/react/24/solid';
 import { ViewMode } from '../App';
 
 interface ChatMessageProps {
@@ -10,7 +9,7 @@ interface ChatMessageProps {
   viewMode: ViewMode;
 }
 
-export default function ChatMessage({ content, isUser, timestamp, sqlCode, rawLlmResponse, viewMode }: ChatMessageProps) {
+export default function ChatMessage({ content, isUser, sqlCode, rawLlmResponse, viewMode }: ChatMessageProps) {
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3`}>
       <div className={`flex items-start max-w-[80%] ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>

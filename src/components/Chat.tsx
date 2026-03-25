@@ -377,10 +377,11 @@ export default function Chat({ viewMode, showSidebar = true, disableInput = fals
         return conv;
       }));
     } catch (error) {
+      const errorDetail = error instanceof Error ? error.message : "Unknown error";
       // Handle error
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: "Sorry, there was an error connecting to the backend service. Please try again later.",
+        content: `Request failed: ${errorDetail}`,
         isUser: false,
         timestamp: new Date().toLocaleTimeString(),
       };

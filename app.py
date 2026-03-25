@@ -3,6 +3,7 @@ from flask_cors import CORS
 import psycopg2
 import traceback
 import os
+from pymongo import MongoClient
 from SQL.db_utils import execute_sql_query
 from SQL.log_utils import insert_log
 from Mongodb.agent3 import process_query as process_mongo
@@ -20,6 +21,43 @@ mongo_config = load_mongo_config()
 @app.route("/health")
 def health():
     return jsonify({"status": "up"})
+
+
+@app.route("/diagnostics", methods=["GET"])
+def diagnostics():
+    result = {
+        "backend": "up",
+        "llm_api_key_present": bool(os.getenv("LLM_API_KEY")),
+        "postgres": {"ok": False, "error": None},
+        "mongo": {"ok": False, "error": None},
+    }
+
+    try:
+        conn = psycopg2.connect(
+            host=os.getenv("DB_HOST", "localhost"),
+            port=os.getenv("DB_PORT", "5432"),
+            database=os.getenv("DB_NAME", "recipe_chatbot"),
+            user=os.getenv("DB_USER", "postgres"),
+            password=os.getenv("DB_PASSWORD", ""),
+        )
+        cur = conn.cursor()
+        cur.execute("SELECT 1;")
+        cur.close()
+        conn.close()
+        result["postgres"]["ok"] = True
+    except Exception as e:
+        result["postgres"]["error"] = str(e)
+
+    try:
+        mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017/")
+        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=2000)
+        client.admin.command("ping")
+        result["mongo"]["ok"] = True
+    except Exception as e:
+        result["mongo"]["error"] = str(e)
+
+    status = 200 if result["postgres"]["ok"] and result["mongo"]["ok"] else 503
+    return jsonify(result), status
 
 @app.route("/")
 def home():
@@ -76,7 +114,12 @@ def ask():
         print(f"❌ Backend error: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        error_text = str(e)
+        status_code = 500
+        lowered = error_text.lower()
+        if "429" in error_text or "quota" in lowered or "rate limit" in lowered:
+            status_code = 429
+        return jsonify({"error": error_text}), status_code
 
 @app.route("/submit", methods=["POST"])
 def submit():

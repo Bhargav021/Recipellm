@@ -2,6 +2,14 @@
 
 An interactive AI-powered chatbot that lets you query recipe and nutrition data using natural language, with support for MongoDB and PostgreSQL backends.
 
+## Canonical Project Root
+
+Use only this folder as the project root:
+
+`Recipellm/`
+
+Do not run the app from nested copies or parent directories. Run every command from this root.
+
 ## 🛠️ Prerequisites
 
 Before starting, ensure you have the following installed:
@@ -55,7 +63,17 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Run the Flask Backend
+### 3. Initialize PostgreSQL Database and Tables
+
+This project includes an idempotent initializer:
+
+```bash
+python scripts/init_postgres.py
+```
+
+This creates the target database from `.env` (default `recipe_chatbot`) and required tables if missing.
+
+### 4. Run the Flask Backend
 
 ```bash
 python app.py
@@ -87,6 +105,16 @@ If you have CSV data and `import_csv_to_mongodb.py`:
 python import_csv_to_mongodb.py
 ```
 
+Note: this script expects `sample_food_com_recipes.csv` to exist in the project root.
+
+## ✅ Run Order (Recommended)
+
+1. Start MongoDB service (`mongod` must be reachable at `localhost:27017`).
+2. Ensure PostgreSQL service is running.
+3. Run `python scripts/init_postgres.py`.
+4. Start backend: `python app.py`.
+5. Start frontend: `pnpm run dev`.
+
 ## 🧪 Testing the Application
 
 1. Ensure **MongoDB**, **PostgreSQL**, and both servers (frontend + backend) are running.
@@ -110,13 +138,14 @@ python import_csv_to_mongodb.py
 | File | Description |
 |------|-------------|
 | `app.py` | Flask backend entrypoint |
-| `agent3.py` | MongoDB LLM agent |
-| `agent3_sql_final.py` | PostgreSQL LLM agent |
+| `Mongodb/agent3.py` | MongoDB LLM agent |
+| `SQL/agent3_sql_final.py` | PostgreSQL LLM agent |
 | `mongo_utils.py`, `db_utils.py` | Database connection helpers |
 | `llm_wrapper.py` | Google GenAI integration |
 | `log_utils.py`, `utils.py` | Logging and shared logic |
 | `requirements.txt` | Python dependencies |
 | `.env` | API keys and DB settings |
+| `scripts/init_postgres.py` | Creates DB and required SQL tables |
 
 ### Frontend (in `src/`)
 
@@ -139,8 +168,10 @@ git push origin main
 | Issue | Fix |
 |-------|-----|
 | MongoDB not responding | Run `mongod` in terminal |
-| PostgreSQL errors | Check `DB_USER`/`DB_PASSWORD` in `.env` |
+| PostgreSQL database missing | Run `python scripts/init_postgres.py` |
+| PostgreSQL auth errors | Check `DB_USER`/`DB_PASSWORD` in `.env` |
 | LLM key error | Verify `LLM_API_KEY` is set and not expired |
+| Gemini quota errors (429) | Check API quota/billing at ai.google.dev and retry after cooldown |
 | React errors | Try `pnpm install` again and restart `pnpm run dev` |
 
 ## 📄 License

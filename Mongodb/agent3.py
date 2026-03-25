@@ -11,6 +11,11 @@ from datetime import datetime
 import re
 import os
 from bson import ObjectId
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+MONGO_SCHEMA_PATH = BASE_DIR / "db_schema_context_mongo.txt"
+MONGO_PROMPT_PATH = BASE_DIR / "llm_prompt_mongo.txt"
 
 PRIMARY_LLM = Custom_GenAI(os.getenv("LLM_API_KEY"))
 SYNTAX_LLM = Custom_GenAI(os.getenv("LLM_API_KEY"))
@@ -436,9 +441,9 @@ def process_query(user_query):
 
 
     # LLM-based Search
-    with open("Mongodb/db_schema_context_mongo.txt", "r") as schema_file:
+    with open(MONGO_SCHEMA_PATH, "r", encoding="utf-8") as schema_file:
         schema = schema_file.read()
-    with open("Mongodb/llm_prompt_mongo.txt", "r", encoding='utf-8') as prompt_file:
+    with open(MONGO_PROMPT_PATH, "r", encoding="utf-8") as prompt_file:
         base_prompt = prompt_file.read()
 
     # user_query = user_query.replace("food_category_id", "").replace("category_name", "")
@@ -533,7 +538,7 @@ def process_query(user_query):
     print("\n🧠 Generated Mongo Query (LLM):\n")
     print(cleaned_query)
 
-    with open("db_schema_context_mongo.txt", "r", encoding="utf-8") as schema_file:
+    with open(MONGO_SCHEMA_PATH, "r", encoding="utf-8") as schema_file:
         mongo_schema = schema_file.read()
 
     syntax_prompt = f"""You are an expert MongoDB syntax and schema validator.
