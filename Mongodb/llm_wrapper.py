@@ -1,13 +1,12 @@
-import google.generativeai as genai
+# Import from parent directory's open-source LLM wrapper
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-class Custom_GenAI:
-    def __init__(self, API_KEY):
-        genai.configure(api_key=API_KEY)
-        self.model = genai.GenerativeModel("gemini-2.0-flash")
+from llm_wrapper_opensource import Custom_GenAI
 
-    def ask_ai(self, prompt):
-        response = self.model.generate_content(prompt)
-        return response.text
+# This module now uses open-source models via Ollama or HuggingFace
+# See ../llm_wrapper_opensource.py for configuration
 
 
 

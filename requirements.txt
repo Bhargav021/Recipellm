@@ -1,3 +1,5 @@
+requests>=2.31.0
+pycountry
 flask==2.3.3
 flask-cors==4.0.0
 python-dotenv==1.0.0
@@ -5,5 +7,4 @@ pymongo==4.6.1
 pandas
 numpy 
 psycopg2-binary
-google-generativeai
 pycountry
